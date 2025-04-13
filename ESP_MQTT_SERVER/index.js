@@ -44,19 +44,19 @@ io.on('connection', (socket) => {
 });
 
 const ADA_USERNAME = process.env.ADA_USERNAME;
-const ADAFRUIT_IO_KEY = process.env.ADAFRUIT_IO_KEY;
+// const ADAFRUIT_IO_KEY = process.env.ADAFRUIT_IO_KEY;
 
-const headers = {
-  'X-AIO-Key': ADAFRUIT_IO_KEY,
-  'Content-Type': 'application/json'
-};
+// const headers = {
+//   'X-AIO-Key': ADAFRUIT_IO_KEY,
+//   'Content-Type': 'application/json'
+// };
 
 const feeds = [
-  'airquality',
+  // 'airquality',
   'humidity',
-  'lightintensity',
-  'motion',
-  'pressure',
+  // 'lightintensity',
+  // 'motion',
+  // 'pressure',
   'temperature'
 ];
 
@@ -64,9 +64,10 @@ async function fetchAllFeeds() {
   try {
     const feedPromises = feeds.map(async (currentFeed) => {
       // console.log(`=== Lấy dữ liệu từ feed: ${currentFeed} ===`);
-      const url = `https://io.adafruit.com/api/v2/${ADA_USERNAME}/feeds/${currentFeed}/data?limit=1`;
+      const url = `https://io.adafruit.com/api/v2/${ADA_USERNAME}/feeds/dadn.${currentFeed}/data?limit=1`;
       try {
-        const response = await axios.get(url, { headers });
+        // const response = await axios.get(url, { headers });
+        const response = await axios.get(url);
         const data = response.data;
         if (data && data.length > 0) {
           const record = data[0];
