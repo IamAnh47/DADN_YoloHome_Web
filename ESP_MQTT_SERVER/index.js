@@ -1,227 +1,114 @@
+require('dotenv').config();
 const express = require('express');
-const mqtt = require('mqtt');
-const app = express();
-const port = 3000;
+const axios = require('axios');
 const http = require('http');
-const server = http.createServer(app);
 const path = require('path');
-const { Server } = require("socket.io");
-const cron = require('node-cron'); // Import node-cron
+const socketIo = require('socket.io');
+const cron = require('cron'); 
+let fetch;
 
-const io = new Server(server);
-const routes = require('./src/routes');
-const sensorModel = require('./src/models/sensors.model');
+const app = express();
+const port = process.env.PORT || 3000;
+const server = http.createServer(app);
+const io = socketIo(server);
 
-// Set EJS as the templating engine
+const routes = require('./src/routes/api.routes');
+const sensorModel = require('./src/models/sensors.model'); 
+const errorHandler = require('./src/middleware/errorHandler');
+
 app.set('view engine', 'ejs');
-
-// Specify the directory where EJS files are located
-app.set('views', path.join(__dirname, 'public/')); // Replace 'templates' with your desired directory
-
-
-let sensorBuffer = [];
-
-// Middleware to parse JSON data
+app.set('views', path.join(__dirname, 'public'));
 app.use(express.json());
-
-// Routes
-app.use('/api', routes);
-
-// Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// MQTT setup
-const mqttClient = mqtt.connect('mqtt:// 192.168.26.42:1883'); // Use your MQTT broker address
-mqttClient.on('connect', () => {
-    console.log('Connected to MQTT broker');
+app.use('/api', routes);
 
-	// Subscribe to the temperature topic
-    mqttClient.subscribe('home/sensors/data', (err) => {
-        if(err){
-            console.error("failed to suscribe to topic: ", err);
-        }
-    });
-	// Subscribe to the another topic
-
-});
-
-
-mqttClient.on('message', async (topic, message) => {
-    if (topic === 'home/sensors/data') {
-
-        const get_payload_str = message.toString();
-        console.log(`${topic} : payload string received : ${get_payload_str}\n`);
-    
-        const sensorData = convert_payload_str_to_obj(get_payload_str);
-
-        console.log('payload: ', sensorData);
-
-        // update web/client with data using socketIO
-        io.emit('sensorData', sensorData);  
-
-        //save sensor data(average) in database
-        save_avg_sensor_data(sensorData);
-    }
-
-    // listen to other suscribe topics
-    // if (topic == x){}
-});
-
-
-// Endpoint to network
 app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/public/graph.html');
-  });
-  
-
-// serve static files
-
-  // endpoint for showing graphs
-  app.get('/graph', (req, res) => {
-    console.log('connect get');
-    res.sendFile(__dirname + '/public/graph.html');
-  });
-
-// Serve static HTML files for rooms
-app.get('/public/living_room.html', (req, res) => {
-    res.sendFile(__dirname + '/public/living_room.html');
-});
-
-app.get('/public/dining_room.html', (req, res) => {
-    res.sendFile(__dirname + '/public/dining_room.html');
-});
-
-app.get('/public/bedroom.html', (req, res) => {
-    res.sendFile(__dirname + '/public/bedroom.html');
-});
-
-app.get('/public/bathroom.html', (req, res) => {
-    res.sendFile(__dirname + '/public/bathroom.html');
+  res.sendFile(path.join(__dirname, 'public', 'graph.html'));
 });
 
 app.get('/detail', async (req, res) => {
-    try {
-        const data = await sensorModel.getAllSensorData();
-        res.render('detail', { data }); // Assuming you're using a template engine
-    } catch (error) {
-        res.status(500).send('Error retrieving data');
-    }
+  try {
+    const data = await sensorModel.getAllSensorData();
+    res.render('detail', { data });
+  } catch (error) {
+    res.status(500).send('Error retrieving data');
+  }
 });
-
- 
 
 io.on('connection', (socket) => {
-    console.log('A user connected to Socket.IO');
-
-    // Handle checkbox data sent from the client
-    socket.on('checkBoxData', (checkBoxData) => {
-        console.log(`Live feedback from checkbox to MQTT: ${checkBoxData}`);
-
-         // Send the retrieved data back to the client
-         socket.emit('x', "mercy me");
-        
-        // Publish the checkbox data to the MQTT topic
-        mqttClient.publish('esp/cmd', checkBoxData);
-    });
-
-    // Handle SensorDataWithinRange requests from the client
-    socket.on('searchTimeRange', async (searchTime) => {
-       
-            // Query the database for sensor data within the specified time range
-            const returnData = await sensorModel.getSensorDataWithinRange(searchTime);
-            
-            // Send the retrieved data back to the client
-            socket.emit('recRange', returnData);
-       
-    });
-
-
-
+  console.log('Client kết nối');
+  socket.on('disconnect', () => {
+    console.log('Client ngắt kết nối');
+  });
 });
 
-function convert_payload_str_to_obj(payload_str){
-    const values = payload_str.split(',');
+const ADA_USERNAME = process.env.ADA_USERNAME;
+const ADAFRUIT_IO_KEY = process.env.ADAFRUIT_IO_KEY;
 
-    return {
-        temperature: parseFloat(values[0]),
-        pressure: parseFloat(values[1]),
-        airQuality: parseFloat(values[2]),
-        lightIntensity: parseFloat(values[3]),
-    };
-}
+const headers = {
+  'X-AIO-Key': ADAFRUIT_IO_KEY,
+  'Content-Type': 'application/json'
+};
 
-async function save_avg_sensor_data(data){
-    sensorBuffer.push(data);
+const feeds = [
+  'airquality',
+  'humidity',
+  'lightintensity',
+  'motion',
+  'pressure',
+  'temperature'
+];
 
-    // if 5 minutes (60 samples if collected every 5 seconds) have passed
-    // calculate the averages and save to DB
-    if (sensorBuffer.length >= 5){
-        const avgTemperature = sensorBuffer.reduce((sum, d) => sum + d.temperature, 0) / sensorBuffer.length;
-        const avgPressure = sensorBuffer.reduce((sum, d) => sum + d.pressure, 0) / sensorBuffer.length;
-        const avgAirQuality = sensorBuffer.reduce((sum, d) => sum + d.airQuality, 0) / sensorBuffer.length;
-        const avgLightIntensity = sensorBuffer.reduce((sum, d) => sum + d.lightIntensity, 0) / sensorBuffer.length;
+async function fetchAllFeeds() {
+  try {
+    const feedPromises = feeds.map(async (currentFeed) => {
+      // console.log(`=== Lấy dữ liệu từ feed: ${currentFeed} ===`);
+      const url = `https://io.adafruit.com/api/v2/${ADA_USERNAME}/feeds/${currentFeed}/data?limit=1`;
+      try {
+        const response = await axios.get(url, { headers });
+        const data = response.data;
+        if (data && data.length > 0) {
+          const record = data[0];
+          const feedValue = parseFloat(record.value);
+          const createdAt = record.created_at;
+          // console.log(`Feed: ${currentFeed} | Giá trị: ${feedValue} | Thời gian: ${createdAt}`);
 
-        const dataObj = {
-            temperature: parseFloat(avgTemperature).toFixed(2),
-            pressure: parseFloat(avgPressure).toFixed(2),
-            airQuality: parseFloat(avgAirQuality).toFixed(2),
-            lightIntensity: parseFloat(avgLightIntensity).toFixed(2)
-        };
+          const sensorRecord = await sensorModel.getSensorByType(currentFeed);
+          if (sensorRecord) {
+            const sensorId = sensorRecord.sensor_id;
+            const payload = {
+              sensor_id: sensorId,
+              svalue: feedValue,
+              recorded_time: createdAt
+            };
 
-        // database query to insert sensor data(average)
-        const returnData = await sensorModel.createSensorData(dataObj);
-        console.log("sensorModel.createSensorData: ", returnData);
+            const insertResult = await sensorModel.createSensorData(payload);
+            // console.log(`Dữ liệu được lưu cho sensor_type "${currentFeed}" (sensor_id: ${sensorId}):`, insertResult);
 
-        // clear the buffer for the next interval
-        console.log("sensorBuffer: ", sensorBuffer);
-        sensorBuffer = [];
-    }
-}
-
-cron.schedule('*/5 * * * * *', async () => {
-    console.log('Running a task every 5 seconds');
-    try {
-        const feeds = ['temperature', 'pressure', 'air-quality', 'light-intensity'];
-        let payload = {
-            temperature: null,
-            pressure: null,
-            airQuality: null,
-            lightIIntensity: null
-        };
-        for (const feed of feeds) {
-            const response = await fetch(`https://io.adafruit.com/api/v2/{thay = username}/feeds/${feed}`, { // THAY USERNAME, feed la ten key(name)cua feed tren adafruit
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-AIO-Key': '' // THAY KEY cua usser
-                }
-            });
-            const data = await response.json();
-            console.log(`Data from ${feed}:`, data.last_value);
-            if(feed === 'temperature') {
-                payload.temperature = data.last_value;
-            } else if(feed === 'pressure') {
-                payload.pressure = data.last_value;
-            } else if(feed === 'air-quality') {
-                payload.airQuality = data.last_value;
-            } else if(feed === 'light-intensity') {
-                payload.lightIntensity = data.last_value;
-            }
+            io.emit('newData', { feed: currentFeed, value: feedValue, created_at: createdAt });
+          } else {
+            console.error(`Không tìm thấy sensor nào với sensor_type: ${currentFeed}`);
+          }
+        } else {
+          console.log(`Không có dữ liệu từ feed "${currentFeed}"`);
         }
-        const response = await fetch('http://localhost:3000/api/sensor', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
-        });
-        console.log(response.text());
+      } catch (error) {
+        console.error(`Lỗi khi fetch dữ liệu từ feed "${currentFeed}":`, error.message);
+      }
+    });
 
-    } catch (err) {
-        console.error('Error calling API:', err);
-    }
-});
+    await Promise.all(feedPromises);
+  } catch (err) {
+    console.error('Lỗi khi fetch dữ liệu từ Adafruit IO:', err.message);
+  }
+}
+
+// Timer, nên tăng lên nha vì ADA nó có giới hạn số request trên 1 thời gian nhất định, để tầm 1s là đẹp á
+setInterval(fetchAllFeeds, 1000);
+
+app.use(errorHandler);
 
 server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
+  console.log(`Server running on http://localhost:${port}`);
 });
