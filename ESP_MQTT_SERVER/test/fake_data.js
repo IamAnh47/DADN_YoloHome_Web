@@ -1,3 +1,7 @@
+// Chỗ này dùng để fake data tuy nhiên nó lại không giống API feeds của ông Nguyên nên mn có thể dựa vào cấu trúc API để chỉnh sửa cho phù hợp
+// Ở chỗ này có write data nên bắt buộc phải có ADA key, chủ yếu dùng để test real time data có hoạt động hoặc có lấy đúng dữ liệu không
+// Note: có 1 số chú ý là mn nên ghi hoạt động của func mn làm để dễ dàng xử lý hơn chứ đọc hơi mệt :]
+// :( ============== :| ============ :) ============= :))
 require('dotenv').config();
 const mqtt = require('mqtt');
 

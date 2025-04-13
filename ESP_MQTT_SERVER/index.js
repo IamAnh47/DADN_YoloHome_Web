@@ -44,6 +44,7 @@ io.on('connection', (socket) => {
 });
 
 const ADA_USERNAME = process.env.ADA_USERNAME;
+// Ở đây chỉ đọc nên không cần ADA KEY
 // const ADAFRUIT_IO_KEY = process.env.ADAFRUIT_IO_KEY;
 
 // const headers = {
@@ -51,6 +52,7 @@ const ADA_USERNAME = process.env.ADA_USERNAME;
 //   'Content-Type': 'application/json'
 // };
 
+// Nên thêm 1 số feeds
 const feeds = [
   // 'airquality',
   'humidity',
@@ -59,7 +61,28 @@ const feeds = [
   // 'pressure',
   'temperature'
 ];
+/** Tui viết document hàm này cho mn dễ hình dung 
+FetchAllFeeds
+========================================================
+Ở đây mình sẽ lấy data mới nhất từ mỗi feed sau đó ghi data vào database,
+Và cấu hình database chỗ table sensor phải được insert trước và tui nghĩ cũng nên inser trước những thứ sẽ đo
+Tui có để cái insert trong file sql á (là mẫu thôi nên cái thiết bị cảm biến bị sai mn có thể sửa lại)
+Sau đó có thể real-time cho client qua socket.io.
 
+1. Duyệt qua từng feed trong array "feeds".
+2. Gửi request GET đến endpoint Adafruit IO để lấy data
+3. Nếu có data:
+    - Parse giá trị và thời gian tạo.
+    - Truy vấn sensor theo type
+    - Tìm được sensor:
+        - Ghi data vào DB bằng model "createSensorData".
+        - Phát dữ liệu mới đến client qua socket "newData". (đoạn này chưa test :(()
+    - Không tìm thấy sensor: => In error
+  4. Request thất bại, log lỗi ra.
+  5. Vì muốn gọi đồng thời nên dùng "Promise.all" để xử lý multi.
+
+Một số note khác tui có comment ở trong file này và khác :| mn xem và tinh chỉnh dễ cho việc mn test nha
+ */
 async function fetchAllFeeds() {
   try {
     const feedPromises = feeds.map(async (currentFeed) => {
@@ -76,6 +99,7 @@ async function fetchAllFeeds() {
           // console.log(`Feed: ${currentFeed} | Giá trị: ${feedValue} | Thời gian: ${createdAt}`);
 
           const sensorRecord = await sensorModel.getSensorByType(currentFeed);
+          
           if (sensorRecord) {
             const sensorId = sensorRecord.sensor_id;
             const payload = {
@@ -83,7 +107,7 @@ async function fetchAllFeeds() {
               svalue: feedValue,
               recorded_time: createdAt
             };
-
+            // Ở hàm này nếu mn không muốn in ra thì vào trong models comment lại
             const insertResult = await sensorModel.createSensorData(payload);
             // console.log(`Dữ liệu được lưu cho sensor_type "${currentFeed}" (sensor_id: ${sensorId}):`, insertResult);
 
