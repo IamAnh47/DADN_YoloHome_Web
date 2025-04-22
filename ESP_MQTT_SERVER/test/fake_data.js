@@ -13,10 +13,10 @@ const client = mqtt.connect('mqtts://io.adafruit.com', {
 const feeds = [
   'temperature',
   'humidity',
-  'airquality',
-  'lightintensity',
-  'motion',
-  'pressure'
+  // 'airquality',
+  // 'lightintensity',
+  // 'motion',
+  // 'pressure'
 ];
 
 client.on('connect', () => {
@@ -28,7 +28,7 @@ client.on('connect', () => {
         feeds.map(feed => {
           return new Promise((resolve, reject) => {
             const value = Math.floor(Math.random() * 100) + 1;
-            const topic = `${process.env.ADA_USERNAME}/feeds/${feed}`;
+            const topic = `${process.env.ADA_USERNAME}/feeds/dadn.${feed}`;
             client.publish(topic, value.toString(), (err) => {
               if (err) {
                 console.error(`Lỗi gửi đến feed "${feed}":`, err.message);

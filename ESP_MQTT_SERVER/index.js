@@ -45,12 +45,12 @@ io.on('connection', (socket) => {
 
 const ADA_USERNAME = process.env.ADA_USERNAME;
 // Ở đây chỉ đọc nên không cần ADA KEY
-// const ADAFRUIT_IO_KEY = process.env.ADAFRUIT_IO_KEY;
+const ADAFRUIT_IO_KEY = process.env.ADAFRUIT_IO_KEY;
 
-// const headers = {
-//   'X-AIO-Key': ADAFRUIT_IO_KEY,
-//   'Content-Type': 'application/json'
-// };
+const headers = {
+  'X-AIO-Key': ADAFRUIT_IO_KEY,
+  'Content-Type': 'application/json'
+};
 
 // Nên thêm 1 số feeds
 const feeds = [
@@ -89,8 +89,8 @@ async function fetchAllFeeds() {
       // console.log(`=== Lấy dữ liệu từ feed: ${currentFeed} ===`);
       const url = `https://io.adafruit.com/api/v2/${ADA_USERNAME}/feeds/dadn.${currentFeed}/data?limit=1`;
       try {
-        // const response = await axios.get(url, { headers });
-        const response = await axios.get(url);
+        const response = await axios.get(url, { headers });
+        // const response = await axios.get(url);
         const data = response.data;
         if (data && data.length > 0) {
           const record = data[0];
